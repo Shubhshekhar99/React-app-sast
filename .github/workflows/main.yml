@@ -41,7 +41,8 @@ jobs:
 
       - name: Terraform Plan
         working-directory: terraform
-        run: terraform plan -out=tfplan
+        run: terraform plan -out=tfplan -lock-timeout=5m
+
 
       - name: Terraform Apply
         working-directory: terraform

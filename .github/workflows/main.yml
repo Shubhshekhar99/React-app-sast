@@ -1,0 +1,107 @@
+name: Terraform + SonarQube + Docker Deployment
+
+on:
+  push:
+    branches:
+      - Shubh
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cicd:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -------------------------
+      # Checkout Code
+      # -------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # AWS OIDC Authentication
+      # -------------------------
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_shubh }}
+          aws-region: us-west-1
+
+      # -------------------------
+      # Terraform Setup
+      # -------------------------
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve
+
+      # -------------------------
+      # Get Terraform Outputs
+      # -------------------------
+      - name: Get Terraform Outputs
+        id: tf
+        working-directory: terraform
+        run: |
+          echo "EC2_IP=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
+          echo "ECR_URI=$(terraform output -raw ecr_repository_url)" >> $GITHUB_OUTPUT
+
+      # =====================================================
+      # 🔍 SONARQUBE SCAN (BEFORE DEPLOY)
+      # =====================================================
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v2
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=cn-web
+            -Dsonar.sources=.
+
+      - name: SonarQube Quality Gate
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # =====================================================
+      # 🚀 DEPLOY (ONLY IF SCAN PASSES)
+      # =====================================================
+
+      # Login to ECR
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Build & Push Image
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t my-reactapp .
+          docker tag my-reactapp:latest ${{ steps.tf.outputs.ECR_URI }}:latest
+          docker push ${{ steps.tf.outputs.ECR_URI }}:latest
+
+      # Setup SSH
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.MYKEY_SHUBH }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ steps.tf.outputs.EC2_IP }} >> ~/.ssh/known_hosts
+
+      # Deploy on EC2
+      - name: Deploy App on EC2
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ steps.tf.outputs.EC2_IP }} << EOF
+            docker pull ${{ steps.tf.outputs.ECR_URI }}:latest
+            docker stop my-reactapp || true
+            docker rm my-reactapp || true
+            docker run -d --name my-reactapp -p 80:80 \
+              ${{ steps.tf.outputs.ECR_URI }}:latest
+          EOF

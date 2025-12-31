@@ -3,7 +3,7 @@ name: Terraform + SonarQube + Docker Deployment
 on:
   push:
     branches:
-      - Shubh
+      - main
 
 permissions:
   id-token: write

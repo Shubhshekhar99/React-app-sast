@@ -76,7 +76,7 @@ jobs:
       - name: Run SonarQube Scan via Docker on EC2
         run: |
           ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.SONAR_EC2_IP }} << EOF
-            docker run --rm \
+            docker run --rm --network host \
               -v /home/ubuntu/sonarqube:/usr/src \
               sonarsource/sonar-scanner-cli \
               -Dsonar.projectKey=cn-web \

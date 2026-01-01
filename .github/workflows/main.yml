@@ -81,9 +81,18 @@ jobs:
               sonarsource/sonar-scanner-cli \
               -Dsonar.projectKey=cn-web \
               -Dsonar.sources=. \
-              -Dsonar.host.url=http://localhost:9000 \
+              -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
               -Dsonar.login=${{ secrets.SONAR_TOKEN }}
           EOF
+
+
+      # -------------------------
+      # 5️⃣ Docker Build & Push to ECR
+      # -------------------------
+      - name: Login to AWS ECR
+        run: |
+          aws ecr get-login-password --region us-west-1 | \
+          docker login --username AWS --password-stdin ${{ steps.tf.outputs.ECR_URI }}
 
       - name: Build & Push Docker Image
         run: |

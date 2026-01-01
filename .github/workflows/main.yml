@@ -85,17 +85,11 @@ jobs:
               -Dsonar.login=${{ secrets.SONAR_TOKEN }}
           EOF
 
-      # -------------------------
-      # 5️⃣ Docker Compose Build & Push
-      # -------------------------
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build & Push Docker Compose Images
+      - name: Build & Push Docker Image
         run: |
-          docker compose -f docker-compose.yml build
+          docker compose build
           IMAGE_URI=${{ steps.tf.outputs.ECR_URI }}:latest
-          docker tag my-reactapp:latest $IMAGE_URI
+          docker tag react-app-sast-react-app:latest $IMAGE_URI
           docker push $IMAGE_URI
 
       # -------------------------

@@ -73,11 +73,12 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SONAR_EC2_IP }} >> ~/.ssh/known_hosts
 
-      - name: Run SonarQube Scan
+      - name: Run SonarQube Scan via Docker on EC2
         run: |
           ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.SONAR_EC2_IP }} << EOF
-            cd /home/ubuntu/sonarqube
-            sonar-scanner \
+            docker run --rm \
+              -v /home/ubuntu/sonarqube:/usr/src \
+              sonarsource/sonar-scanner-cli \
               -Dsonar.projectKey=cn-web \
               -Dsonar.sources=. \
               -Dsonar.host.url=http://localhost:9000 \

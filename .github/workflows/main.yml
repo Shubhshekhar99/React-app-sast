@@ -64,18 +64,18 @@ jobs:
       # -------------------------
       - name: Setup SSH for SonarQube EC2
         run: |
-          if [ -z "${{ secrets.SONAR_HOST_URL }}" ]; then
-            echo "Error: SONAR_HOST_URL is empty!"
+          if [ -z "${{ secrets.SONAR_EC2_IP }}" ]; then
+            echo "Error: SONAR_EC2_IP is empty!"
             exit 1
           fi
           mkdir -p ~/.ssh
-          echo "${{ secrets.SONAR_TOKEN }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.SONAR_EC2_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SONAR_HOST_URL }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SONAR_EC2_IP }} >> ~/.ssh/known_hosts
 
       - name: Run SonarQube Scan
         run: |
-          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.SONAR_HOST_URL }} << EOF
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.SONAR_EC2_IP }} << EOF
             cd /home/ubuntu/sonarqube-project
             sonar-scanner \
               -Dsonar.projectKey=cn-web \

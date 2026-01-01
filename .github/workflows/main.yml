@@ -76,7 +76,7 @@ jobs:
       - name: Run SonarQube Scan
         run: |
           ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.SONAR_EC2_IP }} << EOF
-            cd /home/ubuntu/sonarqube-project
+            cd /home/ubuntu/sonarqube
             sonar-scanner \
               -Dsonar.projectKey=cn-web \
               -Dsonar.sources=. \

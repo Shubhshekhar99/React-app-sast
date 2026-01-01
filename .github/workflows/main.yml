@@ -1,4 +1,4 @@
-name: OIDC + SonarQube SAST + Terraform + Docker Compose Deploy
+name: Terraform + SAST + Docker Compose Deploy
 
 on:
   push:
@@ -30,29 +30,7 @@ jobs:
           aws-region: us-west-1
 
       # -------------------------
-      # 3️⃣ SonarQube Scan on existing EC2
-      # -------------------------
-      - name: Setup SSH for SonarQube EC2
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SONAR_EC2_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SONAR_EC2_IP }} >> ~/.ssh/known_hosts
-
-      - name: Run SonarQube Scan via EC2
-        run: |
-          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.SONAR_EC2_IP }} << EOF
-            cd /home/ubuntu/sonarqube-project
-            # Run the SAST scan assuming scanner-cli is installed
-            sonar-scanner \
-              -Dsonar.projectKey=cn-web \
-              -Dsonar.sources=. \
-              -Dsonar.host.url=http://localhost:9000 \
-              -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-          EOF
-
-      # -------------------------
-      # 4️⃣ Terraform Setup & Apply
+      # 3️⃣ Terraform Setup & Apply
       # -------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -76,6 +54,36 @@ jobs:
           echo "EC2_IP=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
           echo "ECR_URI=$(terraform output -raw ecr_repository_url)" >> $GITHUB_OUTPUT
 
+      - name: Debug Terraform Outputs
+        run: |
+          echo "Terraform EC2 IP: ${{ steps.tf.outputs.EC2_IP }}"
+          echo "Terraform ECR URI: ${{ steps.tf.outputs.ECR_URI }}"
+
+      # -------------------------
+      # 4️⃣ SonarQube SAST Scan on Sonar EC2
+      # -------------------------
+      - name: Setup SSH for SonarQube EC2
+        run: |
+          if [ -z "${{ secrets.SONAR_EC2_IP }}" ]; then
+            echo "Error: SONAR_EC2_IP is empty!"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SONAR_EC2_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SONAR_EC2_IP }} >> ~/.ssh/known_hosts
+
+      - name: Run SonarQube Scan
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.SONAR_EC2_IP }} << EOF
+            cd /home/ubuntu/sonarqube-project
+            sonar-scanner \
+              -Dsonar.projectKey=cn-web \
+              -Dsonar.sources=. \
+              -Dsonar.host.url=http://localhost:9000 \
+              -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          EOF
+
       # -------------------------
       # 5️⃣ Docker Compose Build & Push
       # -------------------------
@@ -90,16 +98,20 @@ jobs:
           docker push $IMAGE_URI
 
       # -------------------------
-      # 6️⃣ Deploy to EC2 created by Terraform
+      # 6️⃣ Deploy App Container on Terraform EC2
       # -------------------------
       - name: Setup SSH for Terraform EC2
         run: |
+          if [ -z "${{ steps.tf.outputs.EC2_IP }}" ]; then
+            echo "Error: EC2_IP is empty!"
+            exit 1
+          fi
           mkdir -p ~/.ssh
           echo "${{ secrets.MYKEY_SHUBH }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ steps.tf.outputs.EC2_IP }} >> ~/.ssh/known_hosts
 
-      - name: Deploy App Container on EC2
+      - name: Deploy App Container
         run: |
           ssh -i ~/.ssh/id_rsa ubuntu@${{ steps.tf.outputs.EC2_IP }} << EOF
             docker pull ${{ steps.tf.outputs.ECR_URI }}:latest

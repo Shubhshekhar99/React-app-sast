@@ -53,9 +53,16 @@ jobs:
           echo "Terraform EC2 IP: ${{ steps.tf.outputs.EC2_IP }}"
           echo "Terraform ECR URI: ${{ steps.tf.outputs.ECR_URI }}"
 
-    # ------------------- SonarQube (SAST – CORRECT WAY) -------------------
+    # ------------------- SonarQube (SAST) -------------------
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v2
+        with:
+          args: >
+            -Dsonar.projectKey=cn-web
+            -Dsonar.projectName=cn-web
+            -Dsonar.sources=src
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**
+            -Dsonar.javascript.file.suffixes=.js,.jsx
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}

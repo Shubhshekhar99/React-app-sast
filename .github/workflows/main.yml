@@ -110,15 +110,31 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ steps.tf.outputs.EC2_IP }} >> ~/.ssh/known_hosts
 
+      #---------    deploy app --------------------
+      
       - name: Deploy App Container
         run: |
-         ssh -i ~/.ssh/id_rsa ubuntu@${{ steps.tf.outputs.EC2_IP }} << EOF
-          # Pull & run container (no AWS CLI needed)
-          docker pull ${{ steps.tf.outputs.ECR_URI }}:latest
-          docker stop my-reactapp || true
-          docker rm my-reactapp || true
-          docker run -d --name my-reactapp -p 80:80 ${{ steps.tf.outputs.ECR_URI }}:latest
-         EOF
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ steps.tf.outputs.EC2_IP }} << 'EOF'
+            set -e
+      
+            # Login to ECR (REQUIRED on EC2)
+            aws ecr get-login-password --region us-west-1 \
+            | docker login --username AWS --password-stdin ${{ steps.tf.outputs.ECR_URI }}
+      
+            # Pull latest image
+            docker pull ${{ steps.tf.outputs.ECR_URI }}:latest
+      
+            # Restart container
+            docker stop my-reactapp || true
+            docker rm my-reactapp || true
+      
+            docker run -d \
+              --restart always \
+              --name my-reactapp \
+              -p 80:80 \
+              ${{ steps.tf.outputs.ECR_URI }}:latest
+          EOF
+
 
 
 

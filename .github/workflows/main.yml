@@ -90,18 +90,24 @@ jobs:
           docker tag react-app-sast-react-app:latest $IMAGE_URI
 
       - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@v2
+        uses: aquasecurity/trivy-action@v0.68.2
         with:
           image-ref: ${{ steps.tf.outputs.ECR_URI }}:latest
-          format: table
-          exit-code: '1'           # Fail pipeline if vulnerabilities found
+          format: json
+          output: trivy-report.json
+          exit-code: '1'           # Fail pipeline if HIGH/CRITICAL vulnerabilities found
           severity: HIGH,CRITICAL
           ignore-unfixed: false
+
+      - name: Upload Trivy Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: trivy-report
+          path: trivy-report.json
 
       - name: Push Docker Image to ECR
         run: |
           docker push ${{ steps.tf.outputs.ECR_URI }}:latest
-
     # ------------------- SSH Deploy to EC2 -------------------
       - name: Setup SSH for Terraform EC2
         run: |

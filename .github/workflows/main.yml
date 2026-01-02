@@ -77,7 +77,7 @@ jobs:
               -Dsonar.login=${{ secrets.SONAR_TOKEN }}
           EOF
 
-      # ------------------- Docker Build & Scan -------------------
+    # ------------------- Docker Build & Scan -------------------
       - name: Login to AWS ECR
         run: |
           aws ecr get-login-password --region us-west-1 | \
@@ -98,7 +98,7 @@ jobs:
             --severity HIGH,CRITICAL \
             --exit-code 1 \
             --format json \
-            --output trivy-report.json \
+            --output /workspace/trivy-report.json \
             ${{ steps.tf.outputs.ECR_URI }}:latest
 
       - name: Upload Trivy Report
@@ -127,18 +127,14 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_rsa ubuntu@${{ steps.tf.outputs.EC2_IP }} << 'EOF'
             set -e
-
             # Login to ECR on EC2
             aws ecr get-login-password --region us-west-1 \
             | docker login --username AWS --password-stdin ${{ steps.tf.outputs.ECR_URI }}
-
             # Pull latest image
             docker pull ${{ steps.tf.outputs.ECR_URI }}:latest
-
             # Stop and remove old container
             docker stop my-reactapp || true
             docker rm my-reactapp || true
-
             # Run new container with restart policy
             docker run -d \
               --restart always \

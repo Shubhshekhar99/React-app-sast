@@ -14,22 +14,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-    #checkout-code
-    
+    # ------------------- Checkout Code -------------------
       - name: Checkout code
         uses: actions/checkout@v4
 
-    #OIDC
-     
+    # ------------------- Configure AWS (OIDC) -------------------
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_SHUBH }}
           aws-region: us-west-1
 
-     #terraform
-     
+    # ------------------- Terraform -------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
@@ -57,8 +53,7 @@ jobs:
           echo "Terraform EC2 IP: ${{ steps.tf.outputs.EC2_IP }}"
           echo "Terraform ECR URI: ${{ steps.tf.outputs.ECR_URI }}"
 
-    #sonarqube
-
+    # ------------------- SonarQube -------------------
       - name: Setup SSH for SonarQube EC2
         run: |
           if [ -z "${{ secrets.SONAR_EC2_IP }}" ]; then
@@ -82,23 +77,32 @@ jobs:
               -Dsonar.login=${{ secrets.SONAR_TOKEN }}
           EOF
 
-
-    #docker
-    
+    # ------------------- Docker Build & Scan -------------------
       - name: Login to AWS ECR
         run: |
           aws ecr get-login-password --region us-west-1 | \
           docker login --username AWS --password-stdin ${{ steps.tf.outputs.ECR_URI }}
 
-      - name: Build & Push Docker Image
+      - name: Build Docker Image
         run: |
           docker compose build
           IMAGE_URI=${{ steps.tf.outputs.ECR_URI }}:latest
           docker tag react-app-sast-react-app:latest $IMAGE_URI
-          docker push $IMAGE_URI
 
-  #deploy Container
-  
+      - name: Scan Docker Image with Trivy
+        uses: aquasecurity/trivy-action@v2
+        with:
+          image-ref: ${{ steps.tf.outputs.ECR_URI }}:latest
+          format: table
+          exit-code: '1'           # Fail pipeline if vulnerabilities found
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+
+      - name: Push Docker Image to ECR
+        run: |
+          docker push ${{ steps.tf.outputs.ECR_URI }}:latest
+
+    # ------------------- SSH Deploy to EC2 -------------------
       - name: Setup SSH for Terraform EC2
         run: |
           if [ -z "${{ steps.tf.outputs.EC2_IP }}" ]; then
@@ -110,31 +114,29 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ steps.tf.outputs.EC2_IP }} >> ~/.ssh/known_hosts
 
-      #---------    deploy app --------------------
-      
       - name: Deploy App Container
         run: |
           ssh -i ~/.ssh/id_rsa ubuntu@${{ steps.tf.outputs.EC2_IP }} << 'EOF'
             set -e
-      
-            # Login to ECR (REQUIRED on EC2)
+
+            # Login to ECR on EC2
             aws ecr get-login-password --region us-west-1 \
             | docker login --username AWS --password-stdin ${{ steps.tf.outputs.ECR_URI }}
-      
+
             # Pull latest image
             docker pull ${{ steps.tf.outputs.ECR_URI }}:latest
-      
-            # Restart container
+
+            # Stop and remove old container
             docker stop my-reactapp || true
             docker rm my-reactapp || true
-      
+
+            # Run new container with restart policy
             docker run -d \
               --restart always \
               --name my-reactapp \
               -p 80:80 \
               ${{ steps.tf.outputs.ECR_URI }}:latest
           EOF
-
 
 
 

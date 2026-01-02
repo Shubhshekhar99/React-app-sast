@@ -90,7 +90,7 @@ jobs:
           docker tag react-app-sast-react-app:latest $IMAGE_URI
 
       - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@v0.68.2
+        uses: aquasecurity/trivy-action@v2.8.0
         with:
           image-ref: ${{ steps.tf.outputs.ECR_URI }}:latest
           format: json
@@ -100,7 +100,7 @@ jobs:
           ignore-unfixed: false
 
       - name: Upload Trivy Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: trivy-report
           path: trivy-report.json
